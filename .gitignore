@@ -163,6 +163,8 @@ cython_debug/
 slack_bot_token.txt
 slack_app_token.txt
 pe_api_key.txt
+config.json
+
 
 # folder
 refcode/

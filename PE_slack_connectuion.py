@@ -4,16 +4,29 @@ import json
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-with open("slack_bot_token.txt") as f:
-    slack_bot_token = f.read()
+# with open("slack_bot_token.txt") as f:
+#     slack_bot_token = f.read()
+# app = App(token=slack_bot_token)
+
+# with open("slack_app_token.txt") as f:
+#     slack_app_token = f.read()
+
+# with open("pe_api_key.txt") as f:
+#     pe_api_key = f.read()
+
+# 設定ファイルの読み込み
+with open("config.json", encoding="utf-8") as config_file:
+    config = json.load(config_file)
+
+slack_app_token = config["slack_app_token"]
+slack_bot_token = config["slack_bot_token"]
+pe_api_key = config["pe_api_key"]
+corp_id = config["corp_id"]
+get_schedule_url = config["get_schedule"]
+post_schedule_url = config["post_schedule"]
+get_empCode_url = config["get_empCode"]
+
 app = App(token=slack_bot_token)
-
-with open("slack_app_token.txt") as f:
-    slack_app_token = f.read()
-
-with open("pe_api_key.txt") as f:
-    pe_api_key = f.read()
-
 
 # 初期画面
 @app.event("app_home_opened")
@@ -349,7 +362,7 @@ def get_employee_code(client, user_id, logger):
         user_email = user_info_response["user"]["profile"].get("email")
         if user_email:
             email_prefix = user_email.split('@')[0]
-            emp_code_url = f"http://192.168.254.101/pe4j/api/rest/v1/xdb/q/records.json?database=情報システム管理/全社共通IT/【極秘】E-mailアカウント管理&query=[{{\"items\":[{{\"field\":\"メールアドレス\",\"opr\":\"=\",\"value\":\"{email_prefix}\"}}]}}]"
+            emp_code_url = get_empCode_url + f"&query=[{{\"items\":[{{\"field\":\"メールアドレス\",\"opr\":\"=\",\"value\":\"{email_prefix}\"}}]}}]"
             emp_code_response = requests.get(emp_code_url, headers={'X-API-Key': pe_api_key})
             emp_code_data = json.loads(emp_code_response.text)
             if emp_code_data["count"] > 0:
@@ -359,10 +372,10 @@ def get_employee_code(client, user_id, logger):
     return None
 
 def get_power_egg_schedule(emp_code, date, logger):
-    url = "http://192.168.254.101/pe4j/api/rest/v1/schedule/schedules.json"
+    url = get_schedule_url
     headers={'X-API-Key': pe_api_key}
     params = {
-        "corpId": "380050117",
+        "corpId": corp_id,
         "empCode": emp_code,
         "fromDate": date,
         "toDate": date,
@@ -432,13 +445,13 @@ def handle_register_schedule(ack, body, logger, client):
     if emp_code:
         # スケジュール登録APIへのリクエストを行う
         try:
-            url = "http://192.168.254.101/pe4j/api/rest/v1/schedule/schedule.json"
+            url = post_schedule_url
             headers = {
                 "X-API-Key": pe_api_key,
                 "Content-Type": "application/json"
             }
             data = {
-                "corpId": "380050117",
+                "corpId": corp_id,
                 "empCode": emp_code,
                 "fromDate": selected_date,
                 "fromTime": from_time.replace(":", ""),
