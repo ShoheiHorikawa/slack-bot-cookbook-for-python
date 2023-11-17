@@ -4,16 +4,6 @@ import json
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-# with open("slack_bot_token.txt") as f:
-#     slack_bot_token = f.read()
-# app = App(token=slack_bot_token)
-
-# with open("slack_app_token.txt") as f:
-#     slack_app_token = f.read()
-
-# with open("pe_api_key.txt") as f:
-#     pe_api_key = f.read()
-
 # 設定ファイルの読み込み
 with open("config.json", encoding="utf-8") as config_file:
     config = json.load(config_file)
@@ -25,8 +15,10 @@ corp_id = config["corp_id"]
 get_schedule_url = config["get_schedule"]
 post_schedule_url = config["post_schedule"]
 get_empCode_url = config["get_empCode"]
+ALLOWED_USER_IDS = config["allowed_user_ids"]
 
 app = App(token=slack_bot_token)
+
 
 # 初期画面
 @app.event("app_home_opened")
@@ -45,8 +37,42 @@ def publish_initial_view(client, user_id, logger):
                     # ラジオボタンのブロック
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": "スケジュールに関して以下の機能を選択してください："},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "*HOW_TO_USE* | 使い方やアプリ情報は [ワークスペース情報]タブ を参照してね！"
+                        }
                     },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "\n"
+                        }
+                    },
+                    {
+		            	"type": "divider"
+		            },
+                    {
+                    "type": "rich_text",
+                    "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "好きな機能を下から選んでね"
+                                    },
+                                    {
+                                        "type": "emoji",
+                                        "name": "t-rex"
+                                    },                                    
+                                ]
+                            }
+                        ]   
+		            },
+                    {
+		            	"type": "divider"
+		            },
                     {
                         "type": "actions",
                         "elements": [
@@ -54,21 +80,31 @@ def publish_initial_view(client, user_id, logger):
                                 "type": "radio_buttons",
                                 "options": [
                                     {
-                                        "text": {"type": "plain_text", "text": "確認(1ユーザ)"},
+                                        "text": {"type": "plain_text", "text": "確認(1ユーザ)🦖"},
                                         "value": "check"
                                     },
                                     {
-                                        "text": {"type": "plain_text", "text": "登録"},
+                                        "text": {"type": "plain_text", "text": "確認(複数ユーザ)🦖🦕"},
+                                        "value": "multi_check"
+                                    },
+                                    {
+                                        "text": {"type": "plain_text", "text": "登録🕒"},
                                         "value": "register"
                                     },
-                                    # {
-                                    #     "text": {"type": "plain_text", "text": "アイトルトコ"},
-                                    #     "value": "multi_check"
-                                    # },
                                 ],
                                 "action_id": "selection_action"
                             }
                         ]
+                    },
+                    {
+		            	"type": "divider"
+		            },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "Presented by _NIKKO_ _AI_"
+                        }
                     }
                 ]
             }
@@ -84,12 +120,20 @@ def handle_selection_action(ack, body, client, logger):
     user_id = body["user"]["id"]
     selection = body["actions"][0]["selected_option"]["value"]
 
+    if user_id not in ALLOWED_USER_IDS:
+        ack("このコマンドは特定のユーザーに限定されています。")
+        client.chat_postMessage(
+            channel=user_id,
+            text="このコマンドは特定のユーザーに限定されています。"
+        )
+        return
+
     if selection == "check":
         blocks = get_schedule_blocks()
+    elif selection == "multi_check":
+        blocks = get_multi_user_schedule_blocks()
     elif selection == "register":
         blocks = post_schedule_blocks()
-    # elif selection == "multi_check":
-    #     blocks = get_multi_schedule_blocks()
 
     blocks.append(get_back_button_block())
     client.views_publish(
@@ -174,22 +218,64 @@ def get_schedule_blocks():
     ]
 
 
+# 複数ユーザーのスケジュール確認ブロック
+def get_multi_user_schedule_blocks():
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    return [
+        # 複数ユーザー選択のブロック
+        {
+            "type": "section",
+            "block_id": "multi_user_select_block",
+            "text": {
+                "type": "mrkdwn",
+                "text": "スケジュールを確認するユーザー（複数選択可能）を選択してください："
+            },
+            "accessory": {
+                "type": "multi_users_select",
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "ユーザーを選択",
+                    "emoji": True
+                },
+            "action_id": "multi_user_select_action"
+            }
+        },
+        # 日付選択器のブロック
+        {
+            "type": "input",
+            "block_id": "date_select_block",
+            "element": {
+                "type": "datepicker",
+                "initial_date": current_date,
+                "action_id": "date_selected"
+            },
+            "label": {
+                "type": "plain_text",
+                "text": "日付を選択してください"
+            }
+        },
+        # 確認ボタンのブロック
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "確認"
+                    },
+                    "value": "confirm_multi",
+                    "action_id": "confirm_multi_schedule"
+                }
+            ]
+        }
+    ]
+
+
 # スケジュール登録ブロック
 def post_schedule_blocks():
     current_date = datetime.now().strftime('%Y-%m-%d')
     return [
-        # ユーザー選択メニューのブロック
-        # # ユーザー選択
-        # {
-        #     "type": "section",
-        #     "block_id": "user_select_block",
-        #     "text": {"type": "mrkdwn", "text": "スケジュールを登録するユーザーを選択してください："},
-        #     "accessory": {
-        #         "type": "users_select",
-        #         "placeholder": {"type": "plain_text", "text": "ユーザーを選択", "emoji": True},
-        #         "action_id": "user_select_action"
-        #     }
-        # },
         # 日付選択
         {
             "type": "input",
@@ -281,59 +367,6 @@ def post_schedule_blocks():
     ]
 
 
-# # アイトルトコブロック
-# def get_multi_schedule_blocks():
-#     current_date = datetime.now().strftime('%Y-%m-%d')
-#     return [
-#         # ユーザー選択（複数人）
-#         {
-#             "type": "section",
-#             "block_id": "multi_user_select_block",
-#             "text": {"type": "mrkdwn", "text": "スケジュールを確認するユーザーを選択してください："},
-#             "accessory": {
-#                 "type": "multi_users_select",
-#                 "placeholder": {"type": "plain_text", "text": "ユーザーを選択", "emoji": True},
-#                 "action_id": "multi_user_select_action"
-#             }
-#         },
-#         # 開始日付選択
-#         {
-#             "type": "input",
-#             "block_id": "start_date_select_block",
-#             "element": {
-#                 "type": "datepicker",
-#                 "initial_date": current_date,  # 今日の日付をデフォルト値として設定
-#                 "action_id": "start_date_selected"
-#             },
-#             "label": {"type": "plain_text", "text": "開始日付を選択してください"}
-#         },
-#         # 終了日付選択
-#         {
-#             "type": "input",
-#             "block_id": "end_date_select_block",
-#             "element": {
-#                 "type": "datepicker",
-#                 "action_id": "end_date_selected"
-#             },
-#             "label": {"type": "plain_text", "text": "終了日付を選択してください（省略可）"}
-#         },
-#         # 「アイトルトコ」ボタン
-#         {
-#             "type": "actions",
-#             "elements": [
-#                 {
-#                     "type": "button",
-#                     "text": {"type": "plain_text", "text": "アイトルトコ"},
-#                     "value": "find_schedule",
-#                     "action_id": "find_schedule_button"
-#                 }
-#             ]
-#         }
-#     ]
-
-
-
-
 # スケジュール確認機能
 @app.action("confirm_schedule")
 def handle_confirm_schedule(ack, body, logger, client):
@@ -366,7 +399,7 @@ def get_employee_code(client, user_id, logger):
             emp_code_response = requests.get(emp_code_url, headers={'X-API-Key': pe_api_key})
             emp_code_data = json.loads(emp_code_response.text)
             if emp_code_data["count"] > 0:
-                emp_code = str(emp_code_data["records"][0]["社員番号"]["value"])
+                emp_code = str(emp_code_data["records"][0]["従業員コード"]["value"])
                 return "0" + emp_code if len(emp_code) == 5 else emp_code
     logger.error(f"Failed to retrieve user info: {user_info_response.get('error', 'Unknown error')}")
     return None
@@ -403,20 +436,53 @@ def handle_user_selected(ack, body, logger):
     logger.info(body)  # ログ出力（必要に応じて）
 
 
+# 複数ユーザー選択アクションのハンドラ
+@app.action("multi_user_select_action")
+def handle_multi_user_select_action(ack, body, logger):
+    ack()  # アクションの確認応答
+    logger.info(f"Received multi user select action: {body}")  # ログに情報を記録
+
+
+@app.action("confirm_multi_schedule")
+def handle_confirm_multi_schedule(ack, body, logger, client):
+    ack()
+    action_user_id = body["user"]["id"]
+    selected_user_ids = body["view"]["state"]["values"]["multi_user_select_block"]["multi_user_select_action"]["selected_users"]
+    selected_date = body["view"]["state"]["values"]["date_select_block"]["date_selected"]["selected_date"]
+
+    user_schedule_texts = []
+    unable_to_confirm_user_names = []
+
+    for user_id in selected_user_ids:
+        emp_code = get_employee_code(client, user_id, logger)
+        if emp_code:
+            schedule_text = get_power_egg_schedule(emp_code, selected_date, logger)
+            user_info_response = client.users_info(user=user_id)
+            user_name = user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User"
+            user_schedule_texts.append(f"⏱ *{user_name}*\n{schedule_text}\n---")
+        else:
+            user_info_response = client.users_info(user=user_id)
+            unable_to_confirm_user_names.append(user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User")
+
+    # # Remove the last divider line
+    # if user_schedule_texts:
+    #     user_schedule_texts[-1] = user_schedule_texts[-1].rstrip('\n---')
+
+    response_text = "\n\n".join(user_schedule_texts)
+    
+    if unable_to_confirm_user_names:
+        unable_users_text = ", ".join(unable_to_confirm_user_names)
+        response_text += f"\n\n⏱ *{unable_users_text}* はスケジュールを確認できませんでした。"
+
+    client.chat_postMessage(channel=action_user_id, text=response_text)
+
+
 # スケジュール登録機能
 @app.action("register_schedule_button")
 def handle_register_schedule(ack, body, logger, client):
     ack()
     action_user_id = body["user"]["id"]
     values = body["view"]["state"]["values"]
-
-    #  # ユーザー選択の存在チェック
-    # user_selection = values["user_select_block"].get("user_select_action")
-    # if user_selection:
-    #     selected_user_id = user_selection.get("selected_user")
-    #     emp_code = get_employee_code(client, selected_user_id, logger) if selected_user_id else None
-    # else:
-    #     emp_code = None
 
     # アクセスしたユーザーのメールアドレスから社員番号を取得
     emp_code = get_employee_code(client, action_user_id, logger)
@@ -487,157 +553,6 @@ def handle_register_schedule(ack, body, logger, client):
             channel=action_user_id,
             text="適切な社員番号が見つかりませんでした。"
         )
-
-
-# # アイトルトココード
-# @app.action("multi_user_select_action")
-# def handle_multi_user_select_action(ack, body, logger):
-#     ack()
-#     logger.info(body)
-
-# # 時間を分単位で扱う関数
-# def time_to_minutes(t):
-#     h, m = divmod(int(t), 100)
-#     return h * 60 + m
-
-# # 分を時間形式（HH:MM）に変換する関数
-# def format_time(minutes):
-#     return f"{minutes // 60:02d}:{minutes % 60:02d}"
-
-# # 各ユーザーのスケジュールを取得
-# def get_user_schedules(client, user_ids, start_date, end_date, logger):
-#     schedules = {}
-#     for user_id in user_ids:
-#         emp_code = get_employee_code2(client, user_id, logger)
-#         if emp_code:
-#             user_schedule = get_power_egg_schedule2(emp_code, start_date, end_date, logger)
-#             if user_schedule:
-#                 schedules[user_id] = user_schedule
-#     return schedules
-
-# # ユーザー情報取得と社員番号の取得
-# def get_employee_code2(client, user_id, logger):
-#     user_info_response = client.users_info(user=user_id)
-#     if user_info_response["ok"]:
-#         user_email = user_info_response["user"]["profile"].get("email")
-#         if user_email:
-#             email_prefix = user_email.split('@')[0]
-#             emp_code_url = f"http://192.168.254.101/pe4j/api/rest/v1/xdb/q/records.json?database=情報システム管理/全社共通IT/【極秘】E-mailアカウント管理&query=[{{\"items\":[{{\"field\":\"メールアドレス\",\"opr\":\"=\",\"value\":\"{email_prefix}\"}}]}}]"
-#             emp_code_response = requests.get(emp_code_url, headers={'X-API-Key': pe_api_key})
-#             emp_code_data = json.loads(emp_code_response.text)
-#             if emp_code_data["count"] > 0:
-#                 emp_code = str(emp_code_data["records"][0]["社員番号"]["value"])
-#                 return "0" + emp_code if len(emp_code) == 5 else emp_code
-#     logger.error(f"Failed to retrieve user info: {user_info_response.get('error', 'Unknown error')}")
-#     return None
-
-# # PowerEgg APIからスケジュールを取得
-# def get_power_egg_schedule2(emp_code, start_date, end_date, logger):
-#     url = "http://192.168.254.101/pe4j/api/rest/v1/schedule/schedules.json"
-#     headers = {'X-API-Key': pe_api_key}
-#     params = {
-#         "corpId": "380050117",
-#         "empCode": emp_code,
-#         "fromDate": start_date,
-#         "toDate": end_date,
-#         "needParticipantName": 0,
-#         "needResourceName": 0,
-#         "includingNonParticipation": 0,
-#     }
-#     schedule_response = requests.get(url, headers=headers, params=params)
-#     if schedule_response.ok:
-#         data = schedule_response.json()
-#         return [(s['fromTime'], s['toTime']) for s in data['schedules']]
-#     logger.error("Failed to get schedule from PowerEgg API.")
-#     return []
-
-# # JSONデータから空いている時間帯を見つける関数
-# def find_free_time_slots(schedules, start_time, end_time):
-#     # 時間データが空でないか確認
-#     occupied = [(time_to_minutes(s[0]), time_to_minutes(s[1])) for s in schedules if s[0] and s[1]]
-#     occupied.sort()
-
-#     free_slots = []
-#     current = time_to_minutes(start_time)
-
-#     for start, end in occupied:
-#         if current < start:
-#             free_slots.append((current, start))
-#         current = max(current, end)
-
-#     if current < time_to_minutes(end_time):
-#         free_slots.append((current, time_to_minutes(end_time)))
-
-#     return free_slots
-
-# # # 複数人のスケジュールから共通の空き時間帯を見つける関数
-# # def get_common_free_times(schedules_list):
-# #     common_free_times = set(schedules_list[0])
-# #     for slots in schedules_list[1:]:
-# #         common_free_times = common_free_times.intersection(set(slots))
-# #     return list(common_free_times)
-
-# # 複数人の空いている時間から共通の空き時間を見つける関数
-# def get_common_free_times(schedules_list):
-#     # 全員のスケジュールを反転させて空き時間を計算
-#     free_times_list = []
-#     for schedules in schedules_list:
-#         busy_times = [(time_to_minutes(start), time_to_minutes(end)) for start, end in schedules]
-#         day_start = time_to_minutes('0000')
-#         day_end = time_to_minutes('2359')
-#         free_times = [(day_start, busy_times[0][0])] + \
-#                      [(busy_times[i][1], busy_times[i+1][0]) for i in range(len(busy_times)-1)] + \
-#                      [(busy_times[-1][1], day_end)]
-#         free_times_list.append(free_times)
-
-#     # 共通の空き時間を計算
-#     common_free_times = set(free_times_list[0])
-#     for free_times in free_times_list[1:]:
-#         common_free_times = common_free_times.intersection(set(free_times))
-
-#     return list(common_free_times)
-
-
-# # 複数人の空き時間帯を確認するアクション
-# @app.action("find_schedule_button")
-# def handle_find_schedule(ack, body, logger, client):
-#     ack()
-#     action_user_id = body["user"]["id"]
-#     values = body["view"]["state"]["values"]
-#     selected_user_ids = values["multi_user_select_block"]["multi_user_select_action"]["selected_users"]
-#     start_date = values["start_date_select_block"]["start_date_selected"]["selected_date"]
-#     end_date = values["end_date_select_block"]["end_date_selected"]["selected_date"] or start_date
-
-#     # 各ユーザーのスケジュールを取得
-#     schedules = get_user_schedules(client, selected_user_ids, start_date, end_date, logger)
-
-#     # 作業時間を設定（08:20〜17:20）
-#     working_hours = ('0820', '1720')
-    
-#     # # 各ユーザーの空き時間を計算
-#     # individual_free_slots = [find_free_time_slots(schedules[user_id], *working_hours) for user_id in selected_user_ids]
-
-#     individual_free_slots = []
-#     for user_id in selected_user_ids:
-#         if user_id in schedules:
-#             individual_free_slots.append(find_free_time_slots(schedules[user_id], *working_hours))
-#         else:
-#             logger.error(f"No schedule data found for user: {user_id}")
-
-#     # 各ユーザーの空き時間帯をログに出力
-#     logger.info(f"Individual free slots: {individual_free_slots}")
-
-#     # 共通の空き時間を計算
-#     common_free_times = get_common_free_times(individual_free_slots)
-
-#     # 結果の整形と表示
-#     if not common_free_times:
-#         response_text = "共通の空き時間が見つかりませんでした。"
-#     else:
-#         formatted_common_free_times = [(format_time(start), format_time(end)) for start, end in common_free_times]
-#         response_text = "共通の空き時間:\n" + "\n".join([f"{start} - {end}" for start, end in formatted_common_free_times])
-    
-#     client.chat_postMessage(channel=action_user_id, text=response_text)
 
 
 # メイン部分
