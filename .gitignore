@@ -168,3 +168,4 @@ config.json
 
 # folder
 refcode/
+!/sample/*

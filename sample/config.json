@@ -1,0 +1,11 @@
+{
+    "slack_app_token": "xapp-",
+    "slack_bot_token": "xoxb-",
+    "pe_api_key": "d",
+    "corp_id": "",
+    "get_schedule": "http://.../pe4j/api/rest/v1/schedule/schedules.json",
+    "post_schedule": "http://.../pe4j/api/rest/v1/schedule/schedule.json",
+    "get_empCode": "http://.../pe4j/api/rest/v1/xdb/q/records.json?database=...",
+    "allowed_user_ids": ["...", "..."]
+  }
+  
