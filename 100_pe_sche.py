@@ -39,7 +39,7 @@ def publish_initial_view(client, user_id, logger):
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": "*HOW_TO_USE* | 使い方やアプリ情報は [ワークスペース情報]タブ を参照してね！"
+                            "text": "🔰*HOW_TO_USE* | 使い方やアプリ情報は 【ワークスペース情報】タブ を参照してね！"
                         }
                     },
                     {
@@ -379,10 +379,10 @@ def handle_confirm_schedule(ack, body, logger, client):
     emp_code = get_employee_code(client, selected_user_id, logger)
     if emp_code:
         schedule_text = get_power_egg_schedule(emp_code, selected_date, logger)
-        client.chat_postMessage(
-            channel=action_user_id,
-            text=schedule_text
-        )
+        user_info_response = client.users_info(user=selected_user_id)
+        user_name = user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User"
+        formatted_text = f"⏱ *{user_name}* ⏱\n{schedule_text}\n----------"
+        client.chat_postMessage(channel=action_user_id, text=formatted_text)
     else:
         client.chat_postMessage(
             channel=action_user_id,
@@ -421,7 +421,7 @@ def get_power_egg_schedule(emp_code, date, logger):
         data = schedule_response.json()
         total_schedules = data["count"]
         private_schedules = sum([1 for s in data["schedules"] if s["publicState"] == 0])
-        schedule_texts = [f"{format_time_range(s)} ：{'非公開スケジュール' if s['publicState'] == 0 else s['subject']}" for s in data["schedules"]]
+        schedule_texts = [f"【{format_time_range(s)}】 {'非公開スケジュール' if s['publicState'] == 0 else s['subject']}" for s in data["schedules"]]
         return f"{date}のスケジュールは{total_schedules}件あります。その中で非公開スケジュールは{private_schedules}件あります。\n" + "\n".join(schedule_texts)
     logger.error("Failed to get schedule from PowerEgg API.")
     return "スケジュール情報の取得に失敗しました。"
@@ -459,7 +459,7 @@ def handle_confirm_multi_schedule(ack, body, logger, client):
             schedule_text = get_power_egg_schedule(emp_code, selected_date, logger)
             user_info_response = client.users_info(user=user_id)
             user_name = user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User"
-            user_schedule_texts.append(f"⏱ *{user_name}*\n{schedule_text}\n---")
+            user_schedule_texts.append(f"⏱ *{user_name}* ⏱\n{schedule_text}\n----------")
         else:
             user_info_response = client.users_info(user=user_id)
             unable_to_confirm_user_names.append(user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User")
