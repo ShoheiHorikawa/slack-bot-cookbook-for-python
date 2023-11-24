@@ -394,12 +394,11 @@ def get_employee_code(client, user_id, logger):
     if user_info_response["ok"]:
         user_email = user_info_response["user"]["profile"].get("email")
         if user_email:
-            email_prefix = user_email.split('@')[0]
-            emp_code_url = get_empCode_url + f"&query=[{{\"items\":[{{\"field\":\"メールアドレス\",\"opr\":\"=\",\"value\":\"{email_prefix}\"}}]}}]"
+            emp_code_url = get_empCode_url + f"&query=[{{\"items\":[{{\"field\":\"メールアドレス\",\"opr\":\"=\",\"value\":\"{user_email}\"}}]}}]"
             emp_code_response = requests.get(emp_code_url, headers={'X-API-Key': pe_api_key})
             emp_code_data = json.loads(emp_code_response.text)
             if emp_code_data["count"] > 0:
-                emp_code = str(emp_code_data["records"][0]["従業員コード"]["value"])
+                emp_code = str(emp_code_data["records"][0]["社員CD"]["value"])
                 return "0" + emp_code if len(emp_code) == 5 else emp_code
     logger.error(f"Failed to retrieve user info: {user_info_response.get('error', 'Unknown error')}")
     return None
