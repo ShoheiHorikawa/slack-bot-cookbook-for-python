@@ -3,6 +3,10 @@ import requests
 import json
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+import logging
+
+# ロギング設定
+logging.basicConfig(level=logging.INFO, filename='bot_log.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 設定ファイルの読み込み
 with open("config.json", encoding="utf-8") as config_file:
@@ -18,6 +22,25 @@ get_empCode_url = config["get_empCode"]
 ALLOWED_USER_IDS = config["allowed_user_ids"]
 
 app = App(token=slack_bot_token)
+
+
+# ユーザー名を取得する関数
+def get_user_name(client, user_id, logger):
+    try:
+        response = client.users_info(user=user_id)
+        if response["ok"]:
+            return response["user"]["real_name"]
+        else:
+            logger.error(f"Failed to get user info: {response['error']}")
+            return "Unknown User"
+    except Exception as e:
+        logger.error(f"Error while getting user info: {e}")
+        return "Unknown User"
+
+
+# ログ記録関数
+def log_user_action(user_name, action, status="Success", details=""):
+    logging.info(f"User Action - User Name: {user_name}, Action: {action}, Status: {status}, Details: {details}")
 
 
 # 初期画面
@@ -372,22 +395,22 @@ def post_schedule_blocks():
 def handle_confirm_schedule(ack, body, logger, client):
     ack()
     action_user_id = body["user"]["id"]
+    user_name = get_user_name(client, action_user_id, logger)
     selected_user_id = body["view"]["state"]["values"]["user_select_block"]["user_select_action"]["selected_user"]
     selected_date = body["view"]["state"]["values"]["date_select_block"]["date_selected"]["selected_date"]
 
-    # ユーザー情報取得と社員番号の取得を関数化
     emp_code = get_employee_code(client, selected_user_id, logger)
     if emp_code:
         schedule_text = get_power_egg_schedule(emp_code, selected_date, logger)
         user_info_response = client.users_info(user=selected_user_id)
-        user_name = user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User"
-        formatted_text = f"⏱ *{user_name}* ⏱\n{schedule_text}\n----------"
+        user_name_selected = user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User"
+        formatted_text = f"⏱ *{user_name_selected}* ⏱\n{schedule_text}\n----------"
         client.chat_postMessage(channel=action_user_id, text=formatted_text)
+        log_user_action(user_name, "Confirm Schedule", "Success", f"Date: {selected_date}, User ID: {selected_user_id}")
     else:
-        client.chat_postMessage(
-            channel=action_user_id,
-            text="適切な社員番号またはスケジュール情報が見つかりませんでした。"
-        )
+        client.chat_postMessage(channel=action_user_id, text="適切な社員番号またはスケジュール情報が見つかりませんでした。")
+        log_user_action(user_name, "Confirm Schedule", "Failed", f"Date: {selected_date}, User ID: {selected_user_id}")
+
 
 def get_employee_code(client, user_id, logger):
     user_info_response = client.users_info(user=user_id)
@@ -402,6 +425,7 @@ def get_employee_code(client, user_id, logger):
                 return "0" + emp_code if len(emp_code) == 5 else emp_code
     logger.error(f"Failed to retrieve user info: {user_info_response.get('error', 'Unknown error')}")
     return None
+
 
 def get_power_egg_schedule(emp_code, date, logger):
     url = get_schedule_url
@@ -425,6 +449,7 @@ def get_power_egg_schedule(emp_code, date, logger):
     logger.error("Failed to get schedule from PowerEgg API.")
     return "スケジュール情報の取得に失敗しました。"
 
+
 def format_time_range(schedule):
     return f"{schedule['fromTime'][:2]}:{schedule['fromTime'][2:]}-{schedule['toTime'][:2]}:{schedule['toTime'][2:]}"
 
@@ -446,6 +471,7 @@ def handle_multi_user_select_action(ack, body, logger):
 def handle_confirm_multi_schedule(ack, body, logger, client):
     ack()
     action_user_id = body["user"]["id"]
+    action_user_name = get_user_name(client, action_user_id, logger)
     selected_user_ids = body["view"]["state"]["values"]["multi_user_select_block"]["multi_user_select_action"]["selected_users"]
     selected_date = body["view"]["state"]["values"]["date_select_block"]["date_selected"]["selected_date"]
 
@@ -456,16 +482,12 @@ def handle_confirm_multi_schedule(ack, body, logger, client):
         emp_code = get_employee_code(client, user_id, logger)
         if emp_code:
             schedule_text = get_power_egg_schedule(emp_code, selected_date, logger)
-            user_info_response = client.users_info(user=user_id)
-            user_name = user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User"
+            user_name = get_user_name(client, user_id, logger)
             user_schedule_texts.append(f"⏱ *{user_name}* ⏱\n{schedule_text}\n----------")
         else:
-            user_info_response = client.users_info(user=user_id)
-            unable_to_confirm_user_names.append(user_info_response["user"]["real_name"] if user_info_response["ok"] else "Unknown User")
-
-    # # Remove the last divider line
-    # if user_schedule_texts:
-    #     user_schedule_texts[-1] = user_schedule_texts[-1].rstrip('\n---')
+            unable_to_confirm_user_name = get_user_name(client, user_id, logger)
+            unable_to_confirm_user_names.append(unable_to_confirm_user_name)
+            log_user_action(action_user_name, "Multi User Schedule Confirmation", "Failed", f"User ID: {user_id}, Date: {selected_date}")
 
     response_text = "\n\n".join(user_schedule_texts)
     
@@ -474,6 +496,7 @@ def handle_confirm_multi_schedule(ack, body, logger, client):
         response_text += f"\n\n⏱ *{unable_users_text}* はスケジュールを確認できませんでした。"
 
     client.chat_postMessage(channel=action_user_id, text=response_text)
+    log_user_action(action_user_name, "Multi User Schedule Confirmation", "Success", f"Date: {selected_date}, User IDs: {selected_user_ids}")
 
 
 # スケジュール登録機能
@@ -481,77 +504,45 @@ def handle_confirm_multi_schedule(ack, body, logger, client):
 def handle_register_schedule(ack, body, logger, client):
     ack()
     action_user_id = body["user"]["id"]
+    action_user_name = get_user_name(client, action_user_id, logger)
     values = body["view"]["state"]["values"]
 
-    # アクセスしたユーザーのメールアドレスから社員番号を取得
     emp_code = get_employee_code(client, action_user_id, logger)
 
-    # 日付と件名の存在チェック
     date_selection = values["date_select_block"].get("date_selected")
     selected_date = date_selection.get("selected_date") if date_selection else None
-
     subject_input = values["subject_input_block"].get("subject_input")
     subject = subject_input.get("value") if subject_input else None
 
-    # 必須項目のチェック
     if not emp_code or not selected_date or not subject:
-        client.chat_postMessage(
-            channel=action_user_id,
-            text="未入力項目があります。"
-        )
+        client.chat_postMessage(channel=action_user_id, text="未入力項目があります。")
+        log_user_action(action_user_name, "Schedule Registration", "Failed", "Missing required fields")
         return
-    
+
     plan_class_id = values["plan_class_select_block"]["plan_class_selected"]["selected_option"]["value"]
     from_time = values["start_time_select_block"]["start_time_selected"]["selected_time"] or ""
     to_time = values["end_time_select_block"]["end_time_selected"]["selected_time"] or ""
     content = values["content_input_block"]["content_input"]["value"] or ""
     is_public = values["public_select_block"]["public_selected"]["selected_option"]["value"]
-    
-    if emp_code:
-        # スケジュール登録APIへのリクエストを行う
-        try:
-            url = post_schedule_url
-            headers = {
-                "X-API-Key": pe_api_key,
-                "Content-Type": "application/json"
-            }
-            data = {
-                "corpId": corp_id,
-                "empCode": emp_code,
-                "fromDate": selected_date,
-                "fromTime": from_time.replace(":", ""),
-                "toTime": to_time.replace(":", ""),
-                "schedulePlanClassId": plan_class_id,
-                "subject": subject,
-                "content": content,
-                "isPublic": is_public,
-            }
-            response = requests.post(url, headers=headers, json=data)
-            response_data = response.json()
 
-            # ステータスコードのチェックを修正
-            if response.status_code == 200 or "id" in response_data:
-                client.chat_postMessage(
-                    channel=action_user_id,
-                    text=f"スケジュールを登録しました。ID: {response_data.get('id', '不明')}"
-                )
-            else:
-                logger.error(f"Failed to register schedule: {response.text}")
-                client.chat_postMessage(
-                    channel=action_user_id,
-                    text="スケジュール登録に失敗しました。"
-                )
-        except Exception as e:
-            logger.error(f"Error while registering schedule: {e}")
-            client.chat_postMessage(
-                channel=action_user_id,
-                text="スケジュール登録中にエラーが発生しました。"
-            )
-    else:
-        client.chat_postMessage(
-            channel=action_user_id,
-            text="適切な社員番号が見つかりませんでした。"
-        )
+    try:
+        url = post_schedule_url
+        headers = {"X-API-Key": pe_api_key, "Content-Type": "application/json"}
+        data = {
+            "corpId": corp_id, "empCode": emp_code, "fromDate": selected_date, "fromTime": from_time.replace(":", ""), "toTime": to_time.replace(":", ""), "schedulePlanClassId": plan_class_id, "subject": subject, "content": content, "isPublic": is_public,
+        }
+        response = requests.post(url, headers=headers, json=data)
+        response_data = response.json()
+
+        if response.status_code == 200 or "id" in response_data:
+            client.chat_postMessage(channel=action_user_id, text=f"スケジュールを登録しました。ID: {response_data.get('id', '不明')}")
+            log_user_action(action_user_name, "Schedule Registration", "Success", f"Registered schedule for date: {selected_date}")
+        else:
+            client.chat_postMessage(channel=action_user_id, text="スケジュール登録に失敗しました。")
+            log_user_action(action_user_name, "Schedule Registration", "Failed", response.text)
+    except Exception as e:
+        client.chat_postMessage(channel=action_user_id, text="スケジュール登録中にエラーが発生しました。")
+        log_user_action(action_user_name, "Schedule Registration", "Failed", str(e))
 
 
 # メイン部分
