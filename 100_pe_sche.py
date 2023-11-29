@@ -152,7 +152,7 @@ def handle_selection_action(ack, body, client, logger):
         return
 
     if selection == "check":
-        blocks = get_schedule_blocks()
+        blocks = get_schedule_blocks(user_id)
     elif selection == "multi_check":
         blocks = get_multi_user_schedule_blocks()
     elif selection == "register":
@@ -188,7 +188,7 @@ def handle_back_button(ack, body, client, logger):
 
 
 # スケジュール確認ブロック
-def get_schedule_blocks():
+def get_schedule_blocks(current_user_id):
     current_date = datetime.now().strftime('%Y-%m-%d')
     return [
         # ユーザ選択器のブロック
@@ -206,6 +206,7 @@ def get_schedule_blocks():
                     "text": "ユーザーを選択",
                     "emoji": True
                 },
+                "initial_user": current_user_id,
             "action_id": "user_select_action"
             }
         },
