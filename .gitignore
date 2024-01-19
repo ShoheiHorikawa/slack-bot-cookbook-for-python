@@ -169,3 +169,5 @@ config.json
 # folder
 refcode/
 !/sample/*
+config2.json
+log_file.json
