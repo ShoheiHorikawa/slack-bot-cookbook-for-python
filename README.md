@@ -1,48 +1,6 @@
 # slack-bot-cookbook
 Slack bot作成用リポジトリ
 
-# Slack Setting Sample
-## Create New App
-- From Scratch
-- App Name: Favorite Name
-- Pick a work space to develop your app in: Your Workspace  
-
-    
-## OAuth & Permissions
-Bot Token Scopes
-- chat:write
-- users:read
-- users:read.email
-
-
-## Socket Mode
-- Enable Socket Mode: On
-- Event Subscription: On
-    - Event name: app_home_opened
-
-
-## App Home
-- Show Tab
-- Home Tab: On
-
-
-# Prepare
-## Python
-- version: 3.9.9 (Favorite Version)
-
-## Package
-```
-pip install -r requirements.txt
-```
-
-## Token, API_key
-### それぞれ[sample](sample/)内にサンプルファイルがあるので、各自のキーで上書きして、スクリプトと同じディレクトリに保存してください。  
-### なお、スクリプトによって必要なファイルは異なるので、下記の[Codes](#codes)を参照ください。
-- slack_bot_token.txt   :Slackのbotのtoken
-- slack_app_token.txt   :Slackのappのtoken
-- pe_api_key.txt        :POWER EGGのAPIキー  
-- config.json           :PE_slack_connection.py用設定ファイル
-
 
 # Codes
 ## [001_hometab_test.py](001_hometab_test.py)
@@ -85,6 +43,105 @@ SlackとPOWER EGGをAPI経由で接続するスクリプト。
 
 *created by DALL-E3*
 
-
 ### 必要な設定ファイル
 - config.json
+
+
+## [101_koiusa.py](101_koiusa.py)
+### 概要
+Slack上で特定チャンネルに匿名投稿できるbot。  
+アプリ名は「こいうさ(仮)」です。『ラジオネーム、恋するうさぎちゃん』からの引用です。
+流れは以下の通り。
+1. 「こいうさ(仮)」のbotホーム画面にいく。
+1. テキストボックスに悩みを入力し、[投稿！]ボタンを押す。
+1. ChatGPT 3.5による返答が特定チャンネルに東湖されます。
+1. bot１のメッセージ欄でも返信を確認することができます。
+1. 悩み本文や返信をみた他のユーザーが回答してくれたり、共感してくれるとハッピー！
+
+### アプリアイコン
+<img src="icon/Icon_koiusa.png" width="160px"> 
+
+*created by DALL-E3*
+
+### 必要な設定ファイル
+- config2.json
+
+## Token, API_key
+### それぞれ[sample](sample/)内にサンプルファイルがあるので、各自のキーで上書きして、スクリプトと同じディレクトリに保存してください。  
+### なお、スクリプトによって必要なファイルは異なるので、下記の[Codes](#codes)を参照ください。
+- slack_bot_token.txt   :Slackのbotのtoken
+- slack_app_token.txt   :Slackのappのtoken
+- pe_api_key.txt        :POWER EGGのAPIキー  
+- config.json           :PE_slack_connection.py用設定ファイル
+- config2.json          :koiusa.py用設定ファイル
+
+## Package
+```
+pip install -r requirements.txt
+```
+
+
+# 100_Pe-sche
+## Slack Setting Sample
+### Create New App
+- From Scratch
+- App Name: Favorite Name
+- Pick a work space to develop your app in: Your Workspace  
+
+    
+### OAuth & Permissions
+Bot Token Scopes
+- chat:write
+- users:read
+- users:read.email
+
+
+### Socket Mode
+- Enable Socket Mode: On
+- Event Subscription: On
+    - Event name: app_home_opened
+
+
+### App Home
+- Show Tab
+- Home Tab: On
+- Messagea Tab: On
+
+
+## Prepare
+### Python
+- version: 3.9.9 (Favorite Version)
+
+
+
+# 101_こいうさ(仮)
+## Slack Setting Sample
+### Create New App
+- From Scratch
+- App Name: Favorite Name
+- Pick a work space to develop your app in: Your Workspace  
+
+    
+### OAuth & Permissions
+Bot Token Scopes
+- chat:write
+- chat:write.public
+- users:read
+
+
+### Socket Mode
+- Enable Socket Mode: On
+- Event Subscription: On
+    - Event name: app_home_opened
+
+
+### App Home
+- Show Tab
+- Home Tab: On
+- Messagea Tab: On
+
+
+## Prepare
+### Python
+- version: 3.10.11 (Favorite Version)
+
