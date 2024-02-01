@@ -13,6 +13,7 @@ SLACK_APP_TOKEN = config["slack_app_token"]
 SLACK_BOT_TOKEN = config["slack_bot_token"]
 OPENAI_API_KEY = config["OPENAI_API_KEY"]
 CHANNEL_ID = config["channel_id"]
+admin_user = config["admin_user"]
 
 # Slack Bolt アプリの初期化（Socket Modeで）
 app = App(token=SLACK_BOT_TOKEN)
@@ -143,7 +144,24 @@ def publish_initial_home_view(client, user_id, logger):
                                 "action_id": "submit_button"
                             }
                         ]
-                    }
+                    },
+                    {
+		            	"type": "divider"
+		            },
+                    {
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "管理者ボタン！"
+                                },
+                                "value": "admin_value",
+                                "action_id": "admin_button"
+                            }
+                        ]
+                    },
                 ]
             }
         )
@@ -267,6 +285,7 @@ def handle_submission(ack, body, client, logger):
     except Exception as e:
         logger.error(f"Error handling submission: {e}")
 
+
 @app.action("department_select")
 def handle_department_select(ack, body, logger):
     ack()
@@ -277,6 +296,102 @@ def handle_department_select(ack, body, logger):
     # 必要に応じて追加の処理をここに実装
     # 例: 選択された部門に基づいて特定の情報をユーザーに表示する
 
+
+@app.action("admin_button")
+def admin_app(ack, body, client, logger):
+    ack()
+    user_id = body["user"]["id"]
+
+    if user_id not in admin_user:
+        # アプリホームにメッセージを表示するビューを更新
+        client.views_publish(
+            user_id=user_id,
+            view={
+                "type": "home",
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "残念ですが、管理者以外はアクセスできません。"
+                        }
+                    },
+                    get_back_button_block()
+                ]
+            }
+        )
+        return
+    else:
+        publish_admin_home_view(client, user_id)
+
+
+# 管理者用のホーム画面を表示する関数
+def publish_admin_home_view(client, user_id):
+    client.views_publish(
+        user_id=user_id,
+        view={
+            "type": "home",
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "link_input_block",
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "link_input",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "メッセージのリンクを入力してください"
+                        }
+                    },
+                    "label": {
+                        "type": "plain_text",
+                        "text": "メッセージリンク"
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "削除"
+                            },
+                            "style": "danger",
+                            "value": "delete_message",
+                            "action_id": "delete_button"
+                        }
+                    ]
+                },
+                get_back_button_block()
+            ]
+        }
+    )
+
+@app.action("delete_button")
+def handle_delete_button(ack, body, client, logger):
+    ack()
+    user_id = body["user"]["id"]
+    link_input = body["view"]["state"]["values"]["link_input_block"]["link_input"]["value"]
+
+    # リンクからチャンネルIDとメッセージのタイムスタンプを抽出
+    channel_id, message_ts = extract_info_from_link(link_input)
+
+    # メッセージを削除
+    try:
+        client.chat_delete(channel=channel_id, ts=message_ts)
+        # 成功メッセージをユーザーに表示
+        client.chat_postMessage(channel=user_id, text="メッセージを削除しました。")
+    except Exception as e:
+        logger.error(f"Error deleting message: {e}")
+        # エラーメッセージをユーザーに表示
+        client.chat_postMessage(channel=user_id, text="メッセージの削除に失敗しました。")
+
+def extract_info_from_link(link):
+    parts = link.split('/')
+    channel_id = parts[-2]
+    message_ts = parts[-1].split('?')[0].replace('p', '.')
+    return channel_id, message_ts
 
 
 # Socket Modeハンドラの起動
