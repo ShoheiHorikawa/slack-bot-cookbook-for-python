@@ -21,13 +21,15 @@ app = App(token=SLACK_BOT_TOKEN)
 clientai = OpenAI(api_key=OPENAI_API_KEY)
 
 
-def log_to_json(department, user_id, user_name, content, response):
+def log_to_json(department, user_id, user_name, content, response_content, parent_ts, message_ts):
     log_data = {
         "department": department,
         "user_id": user_id,
         "user_name": user_name,
         "content": content,
-        "response": response
+        "response_content": response_content,
+        "parent_ts": parent_ts,  # 返信の親メッセージのTS
+        "message_ts": message_ts,  # 返信自体のTS
     }
 
     with open('log_file.json', 'a', encoding="utf-8") as log_file:
@@ -183,6 +185,7 @@ def update_home_tab(client, event, logger):
     except Exception as e:
         logger.error(f"Error publishing home tab: {e}")
 
+
 # ボタンが押されたときの処理
 @app.action("submit_button")
 def handle_submission(ack, body, client, logger):
@@ -248,6 +251,7 @@ def handle_submission(ack, body, client, logger):
             attachments=question_attachment,
             text="AIから返信があるよ！",
         )
+        question_ts = result["ts"]
 
         # スレッドにAIの回答を投稿
         response_attachment = [
@@ -271,7 +275,7 @@ def handle_submission(ack, body, client, logger):
                 ]
             }
         ]
-        client.chat_postMessage(
+        app_response = client.chat_postMessage(
             channel=channel_id,
             thread_ts=result["ts"],
             attachments=response_attachment,
@@ -279,11 +283,14 @@ def handle_submission(ack, body, client, logger):
         )
         client.chat_postMessage(channel=user_id, text="*あなたのおなやみ*\n```" + user_input + "```\n" + "*わたしのアイディアは下の通りだよ！*\n" + response.choices[0].message.content)
 
+        response_ts = app_response["ts"]
+
         # ログを保存
-        log_to_json(selected_department, user_id, user_name, user_input, response.choices[0].message.content)
+        log_to_json(selected_department, user_id, user_name, user_input, response.choices[0].message.content, question_ts, response_ts)
 
     except Exception as e:
         logger.error(f"Error handling submission: {e}")
+        client.chat_postMessage(channel=user_id, text="ごめんねエラーが発生したよ。入力テキストを見直してもう一度試してみてね！")
 
 
 @app.action("department_select")
@@ -392,6 +399,60 @@ def extract_info_from_link(link):
     channel_id = parts[-2]
     message_ts = parts[-1].split('?')[0].replace('p', '.')
     return channel_id, message_ts
+
+
+# リアクションが追加されたイベントを捕捉するリスナー
+@app.event("reaction_added")
+def handle_reaction_added(event, client, logger):
+    # チャンネルIDを取得
+    channel_id = event["item"]["channel"]
+    # 特定のチャンネルに限定
+    if channel_id == CHANNEL_ID:
+        # メッセージのTS（タイムスタンプ）を取得
+        message_ts = event["item"]["ts"]
+        # リアクションを追加したユーザーのIDを取得
+        user_id = event["user"]
+        
+        # ユーザー名の取得
+        user_info = client.users_info(user=user_id)
+        user_name = user_info["user"]["name"] if user_info["ok"] else "unknown"
+
+        # ログデータに追加
+        log_reaction_to_json(channel_id, message_ts, user_id, user_name)
+
+
+def log_reaction_to_json(channel_id, message_ts, user_id, user_name):
+    log_data = {
+        "channel_id": channel_id,
+        "message_ts": message_ts,
+        "user_id": user_id,
+        "user_name": user_name,
+        "action": "reaction_added"
+    }
+
+    with open('reaction_log_file.json', 'a', encoding="utf-8") as log_file:
+        json.dump(log_data, log_file, ensure_ascii=False)
+        log_file.write('\n')  # 次のログエントリのための改行
+
+
+@app.event("message")
+def handle_message(event, client, logger):
+    # チャンネルIDとイベントが返信であるかどうかを確認
+    channel_id = event.get("channel")
+    thread_ts = event.get("thread_ts")
+    message_ts = event.get("ts")
+
+    # 特定のチャンネルに限定し、返信のみを対象とする
+    if channel_id == CHANNEL_ID and thread_ts and thread_ts != message_ts:
+        user_id = event.get("user")
+        
+        # ユーザー名を取得
+        result = client.users_info(user=user_id)
+        user_info = result.data
+        user_name = user_info["user"]["name"] if "user" in user_info else "unknown"
+
+        # ログに記録
+        log_to_json(None, user_id, user_name, None, event.get("text"), thread_ts, message_ts)
 
 
 # Socket Modeハンドラの起動

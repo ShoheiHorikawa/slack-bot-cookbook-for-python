@@ -171,3 +171,4 @@ refcode/
 !/sample/*
 config2.json
 log_file.json
+reaction_log_file.json
